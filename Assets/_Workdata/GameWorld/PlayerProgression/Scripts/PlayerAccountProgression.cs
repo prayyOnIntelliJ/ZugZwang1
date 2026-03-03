@@ -4,15 +4,12 @@ using UnityEngine;
 
 public class PlayerAccountProgression : MonoBehaviour
 {
-    private const string PLAYERPREFS_LEVEL_KEY = "level";
-    private const string PLAYERPREFS_XP_KEY = "xp";
-
     [Separator("Rank Settings")] [SerializeField]
     private RanksSO rankSO;
 
     [HideInInspector] public List<RanksSO.Rank> ranks;
-    private int levelUpCount;
 
+    private int levelUpCount;
     private ProgressBar progressBar;
 
     public int CurrentLevel
@@ -21,7 +18,7 @@ public class PlayerAccountProgression : MonoBehaviour
         set => Prefs.SetKey(Prefs.KEY_TYPES.LEVEL, value);
     }
 
-    public int CurrentXP
+    public int CurrentXp
     {
         get => Prefs.GetKey<int>(Prefs.KEY_TYPES.XP);
         set => Prefs.SetKey(Prefs.KEY_TYPES.XP, value);
@@ -29,8 +26,19 @@ public class PlayerAccountProgression : MonoBehaviour
 
     private void Awake()
     {
+        if (rankSO == null)
+        {
+            Debugger.LogError("RankSO missing.");
+            return;
+        }
+
         ranks = rankSO.ranks;
         progressBar = GetComponent<ProgressBar>();
+
+        if (progressBar == null)
+        {
+            Debugger.LogWarning("ProgressBar missing on PlayerAccountProgression.");
+        }
     }
 
     private void Start()
@@ -40,21 +48,21 @@ public class PlayerAccountProgression : MonoBehaviour
 
     public float GetLevelProgress()
     {
-        var currentRankIndex = GetCurrentRankIndex(CurrentLevel);
-        float xpGained = ranks[currentRankIndex].xpPerLevel;
-        return CurrentXP / xpGained;
+        var rankIndex = GetCurrentRankIndex(CurrentLevel);
+        if (rankIndex < 0 || rankIndex >= ranks.Count)
+            return 0f;
+
+        float xpNeeded = ranks[rankIndex].xpPerLevel;
+        if (xpNeeded <= 0f)
+            return 0f;
+
+        return Mathf.Clamp01(CurrentXp / xpNeeded);
     }
 
 
-    public int GetLevelUpCount()
-    {
-        return levelUpCount;
-    }
+    public int GetLevelUpCount() => levelUpCount;
 
-    public int GetCurrentRankIndex()
-    {
-        return GetCurrentRankIndex(CurrentLevel);
-    }
+    public int GetCurrentRankIndex() => GetCurrentRankIndex(CurrentLevel);
 
     public int GetCurrentRankIndex(int level)
     {
@@ -65,58 +73,62 @@ public class PlayerAccountProgression : MonoBehaviour
             return 0;
 
         for (var i = 0; i < ranks.Count - 1; i++)
+        {
             if (level >= ranks[i].levelToReach &&
                 level < ranks[i + 1].levelToReach)
                 return i;
+        }
 
         return ranks.Count - 1;
     }
 
 
-    public void AddXP(int amount)
+    public void AddXp(int amount)
     {
-        var currentXp = CurrentXP;
-        var currentLevel = CurrentLevel;
+        if (amount <= 0) return;
 
-        currentXp += amount;
+        levelUpCount = 0;
 
-        CheckForLevelup(currentXp, currentLevel);
+        int newXp = CurrentXp + amount;
+        int newLevel = CurrentLevel;
+
+        ProcessLevelUps(ref newXp, ref newLevel);
+
+        CurrentXp = newXp;
+        CurrentLevel = newLevel;
+
+        if (progressBar != null)
+        {
+            int startingLevel = newLevel - levelUpCount;
+            progressBar.StartFilling(startingLevel, levelUpCount);
+        }
     }
 
     private void SetDefaultValues()
     {
-        if (!Prefs.HasKey(Prefs.KEY_TYPES.LEVEL)) Prefs.SetKey(Prefs.KEY_TYPES.LEVEL, 0);
-        if (!Prefs.HasKey(Prefs.KEY_TYPES.XP)) Prefs.SetKey(Prefs.KEY_TYPES.XP, 0);
+        if (!Prefs.HasKey(Prefs.KEY_TYPES.LEVEL))
+            CurrentLevel = 0;
+        if (!Prefs.HasKey(Prefs.KEY_TYPES.XP))
+            CurrentXp = 0;
     }
 
-    private void CheckForLevelup(int currentXp, int currentLevel)
+    private void ProcessLevelUps(ref int xp, ref int level)
     {
-        while (true)
+        int safety = 0;
+
+        while (safety++ < 1000)
         {
-            var currentRankIndex = GetCurrentRankIndex(currentLevel);
-
-            if (currentRankIndex >= ranks.Count)
+            int rankIndex = GetCurrentRankIndex(level);
+            if (rankIndex < 0 || rankIndex >= ranks.Count)
                 break;
 
-            var xpNeeded = ranks[currentRankIndex].xpPerLevel;
-
-            if (currentXp >= xpNeeded)
-            {
-                currentXp -= xpNeeded;
-                currentLevel++;
-                levelUpCount++;
-            }
-            else
-            {
+            int xpNeeded = ranks[rankIndex].xpPerLevel;
+            if (xp < xpNeeded)
                 break;
-            }
+
+            xp -= xpNeeded;
+            level++;
+            levelUpCount++;
         }
-
-        CurrentXP = currentXp;
-        CurrentLevel = currentLevel;
-        PlayerPrefs.Save();
-
-        var startingCount = currentLevel - GetLevelUpCount();
-        progressBar.StartFilling(startingCount, levelUpCount);
     }
 }

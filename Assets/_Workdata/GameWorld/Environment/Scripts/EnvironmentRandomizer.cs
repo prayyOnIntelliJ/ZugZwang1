@@ -5,11 +5,8 @@ using UnityEngine;
 
 public class EnvironmentRandomizer : MonoBehaviour
 {
-#pragma warning disable CS0414 // Field is assigned but its value is never used
     [Separator("Info")] [SerializeField] [ReadOnly]
     private string note = "Only change in DefaultSegment.";
-#pragma warning restore CS0414 // Field is assigned but its value is never used
-
     [Separator("Transition Settings")]
     [SerializeField, PositiveValueOnly, Tooltip("Every x segments, the asset pool gets switched.")]
     private int segmentCountForTransition;
